@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SewFlow — автоматизация швейного производства</title>
+<style>
+:root{--bg:#0f1115;--panel:#181c24;--border:#2a303c;--text:#e6e9ef;--muted:#8b93a3;
+--accent:#4cc38a;--blue:#58a6ff;--warn:#e3b341;--red:#e5534b}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:32px 20px}
+h1{font-size:24px}h1 span{color:var(--accent)}
+.subtitle{color:var(--muted);font-size:14px;margin-top:6px}
+.flash{margin:16px 0;padding:12px 16px;border-radius:10px;font-size:14px;
+background:#1d3a2b;color:var(--accent);border:1px solid #2d5a41}
+.flash.err{background:#3a1d1d;color:var(--red);border-color:#5a2d2d}
+.tabs{display:flex;gap:8px;margin:24px 0 0;border-bottom:1px solid var(--border)}
+.tab{padding:10px 20px;cursor:pointer;color:var(--muted);border:none;background:none;
+font-size:15px;border-bottom:2px solid transparent}
+.tab.active{color:var(--text);border-bottom-color:var(--accent)}
+.pane{display:none;padding:24px 0}
+.pane.active{display:block}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px}
+h2{font-size:17px;margin-bottom:14px}
+p.hint{color:var(--muted);font-size:13px;margin-bottom:16px;line-height:1.6}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
+input[type=text],select,textarea{width:100%;background:var(--bg);border:1px solid var(--border);
+border-radius:8px;color:var(--text);padding:10px 12px;font-size:14px}
+input[type=file]{color:var(--muted);font-size:13px;margin-top:4px}
+button.submit{margin-top:18px;background:var(--accent);color:#0f1115;border:none;border-radius:8px;
+padding:11px 24px;font-size:15px;font-weight:600;cursor:pointer}
+button.submit.blue{background:var(--blue)}
+ul.files{list-style:none;margin-top:8px}
+ul.files li{padding:8px 0;border-bottom:1px solid var(--border);font-size:14px}
+ul.files a{color:var(--blue);text-decoration:none}
+.check{display:flex;align-items:center;gap:8px;margin-top:14px;color:var(--muted);font-size:13px}
+.check input{width:auto}
+footer{color:var(--muted);font-size:12px;text-align:center;margin-top:32px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Sew<span>Flow</span></h1>
+  <div class="subtitle">Автоматизация швейного микро-производства: техкарты · себестоимость</div>
+
+  {% if flash %}<div class="flash">✔ {{ flash }}</div>{% endif %}
+  {% if error %}<div class="flash err">✖ {{ error }}</div>{% endif %}
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab(0)">✂ Техкарты</button>
+    <button class="tab" onclick="showTab(1)">₽ Себестоимость</button>
+  </div>
+
+  <div class="pane active">
+    <div class="panel">
+      <h2>Генератор техкарт — скилл <code>/tcgen</code> (Claude Code)</h2>
+      <p class="hint">Положите фото ручного эскиза в <code>sketches/&lt;название&gt; &lt;размер&gt;.png</code>
+      и запустите в Claude Code: <code>/tcgen &lt;название&gt; &lt;размер&gt;</code>.
+      Скилл составит техкарту (спецификация, детали кроя, материалы) и при наличии ключа
+      ProxyAPI сгенерирует чертёж в масштабе.</p>
+    </div>
+    <div class="panel">
+      <h2>Техкарты в проекте</h2>
+      <ul class="files">
+        {% for c in cards %}
+        <li><a href="/view/tech_maps/{{ c.name }}" target="_blank">{{ c.name }}</a></li>
+        {% else %}<li style="color:var(--muted)">Пока нет техкарт</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div class="pane">
+    <div class="panel">
+      <h2>Калькулятор себестоимости</h2>
+      <p class="hint">Выберите техкарту — расход материалов сверяется с прайсом (Google Sheets),
+      результат сохраняется HTML-дашбордом в cost_reports/.</p>
+      <form method="post" action="/costing">
+        <label>Техкарта</label>
+        <select name="card">
+          {% for c in cards %}<option value="{{ c.name }}">{{ c.name }}</option>{% endfor %}
+        </select>
+        <button class="submit blue" type="submit">Рассчитать себестоимость</button>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>Дашборды себестоимости</h2>
+      <ul class="files">
+        {% for r in reports %}
+        <li><a href="/view/cost_reports/{{ r.name }}" target="_blank">{{ r.name }}</a></li>
+        {% else %}<li style="color:var(--muted)">Пока нет отчётов</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <footer>sewflow · локальный запуск · данные не покидают машину (кроме ProxyAPI и Google Sheets)</footer>
+</div>
+<script>
+function showTab(i){
+  document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('active',i===j));
+  document.querySelectorAll('.pane').forEach((p,j)=>p.classList.toggle('active',i===j));
+}
+</script>
+</body>
+</html>
