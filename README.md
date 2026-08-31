@@ -80,6 +80,8 @@ python -m modules.costing SB-146.md   # расчёт себестоимости
 - `.claude/skills/tkcost/` — расчёт себестоимости по техкарте:
   `/tkcost <модель> <размер>`. Скилл сам находит техкарту, тянет прайс
   из Google Sheets (ссылка — в `.env`) и сохраняет HTML-дашборд.
+- `.claude/skills/sewops/` — сопровождение репозитория: структура проекта,
+  правила запуска, правок, обновления README, чек-лист ошибок и публикации.
 
 ## Структура
 
@@ -88,7 +90,7 @@ sewflow/
 ├─ app.py                     # веб-интерфейс (Flask)
 ├─ modules/costing.py         # калькулятор себестоимости
 ├─ templates/index.html       # UI (тёмная тема)
-├─ .claude/skills/            # tcgen, tkcost
+├─ .claude/skills/            # tcgen, tkcost, sewops
 ├─ sketches/                  # ручные эскизы (вход tcgen)
 ├─ tech_maps/                 # техкарты (md) + чертежи (png)
 ├─ cost_reports/              # дашборды себестоимости (html)
