@@ -96,6 +96,98 @@ def parse_materials(md_path: Path) -> list[dict]:
     return items
 
 
+# ---------- Раскладка кроя по ширине рулона ----------
+
+GAP_CM = 1.0  # технологический зазор между деталями в ряду
+
+
+def parse_cut_parts(md_path: Path) -> list[dict]:
+    """Ищет markdown-таблицу «Детали кроя»: | Деталь | Размер, см | Кол-во |.
+
+    Размер «A × B» (допускается «30/38 × 22» для трапеций — берётся бо́льшая сторона).
+    Кол-во «2» или «1 (из полос)» — берётся целое число.
+    """
+    text = Path(md_path).read_text(encoding="utf-8")
+    parts = []
+    header_ok = False
+    for line in text.splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if not header_ok:
+            if len(cells) >= 3 and any("детал" in c.lower() for c in cells) \
+                    and any("размер" in c.lower() for c in cells) \
+                    and any("кол" in c.lower() for c in cells):
+                header_ok = True
+            continue
+        if line.strip().startswith("|---") or set(line.strip()) <= set("|-: "):
+            continue
+        if not line.strip().startswith("|"):
+            if parts:
+                break
+            continue
+        m = re.match(r"([\d/.,\s]+)\s*[×xх]\s*([\d/.,\s]+)", cells[1])
+        if len(cells) >= 3 and m:
+            sides = []
+            for g in m.groups():
+                vals = [_num(v) for v in g.split("/")]
+                vals = [v for v in vals if v]
+                sides.append(max(vals) if vals else None)
+            cnt_m = re.search(r"\d+", cells[2])
+            if all(sides) and cnt_m:
+                parts.append({"name": cells[0], "a_cm": sides[0], "b_cm": sides[1],
+                              "count": int(cnt_m.group())})
+    return parts
+
+
+def pack_strips(parts: list[dict], width_m: float) -> dict:
+    """Полочная раскладка (first-fit decreasing) поперёк рулона шириной width_m.
+
+    Каждая деталь поворачивается длинной стороной вдоль рулона. Детали сортируются
+    по длине (по убыванию) и укладываются в полосы: новая деталь встаёт в первую
+    полосу, где хватает ширины, иначе открывается новая полоса. Длина полосы =
+    длина первой (самой длинной) детали. Зазор между деталями — GAP_CM.
+    Возвращает метраж (м.пог.), площадь по раскладке и КИМ (долю использования).
+    """
+    W_cm = width_m * 100
+    pieces = []  # (вдоль, поперёк, имя детали)
+    for p in parts:
+        along, across = max(p["a_cm"], p["b_cm"]), min(p["a_cm"], p["b_cm"])
+        pieces += [(along, across, p["name"])] * p["count"]
+    pieces.sort(key=lambda x: -x[0])
+
+    strips = []  # {"len": длина полосы, "left": остаток ширины}
+    for along, across, _ in pieces:
+        need = across + GAP_CM
+        placed = False
+        for s in strips:
+            if need <= s["left"]:
+                s["left"] -= need
+                placed = True
+                break
+        if not placed:
+            strips.append({"len": along, "left": max(0.0, W_cm - across)})
+    total_len_cm = sum(s["len"] + GAP_CM for s in strips)
+
+    area_m2 = sum(p["a_cm"] * p["b_cm"] * p["count"] for p in parts) / 10_000
+    length_m = round(total_len_cm / 100, 2)
+    used_m2 = round(length_m * width_m, 2)
+    rows = [{"name": f"Полоса {i+1}", "a_cm": s["len"], "b_cm": round(W_cm - s["left"], 1),
+             "count": "", "per_row": "—", "rows": "—", "row_len_cm": s["len"]}
+            for i, s in enumerate(strips)]
+    return {"width_m": width_m, "length_m": length_m, "used_m2": used_m2,
+            "area_m2": round(area_m2, 2),
+            "kim": round(area_m2 / used_m2, 3) if used_m2 else None,
+            "rows": rows, "strips": len(strips)}
+
+
+def compute_layout(md_path: Path, width_m: float | None = None) -> dict | None:
+    """Раскладка по таблице кроя; None, если таблицы нет или детали не распарсились."""
+    width_m = width_m or float(os.getenv("FABRIC_WIDTH", "1.5"))
+    parts = parse_cut_parts(md_path)
+    if not parts:
+        return None
+    return {"width_m": width_m, **pack_strips(parts, width_m)}
+
+
 # ---------- Расчёт ----------
 
 def calculate(md_path: Path, prices: list[dict] | None = None) -> dict:
@@ -114,7 +206,8 @@ def calculate(md_path: Path, prices: list[dict] | None = None) -> dict:
             unaccounted.append(it)
     return {"techcard": Path(md_path).stem, "items": items,
             "unaccounted": unaccounted,
-            "total": round(sum(i["total"] for i in items), 2)}
+            "total": round(sum(i["total"] for i in items), 2),
+            "layout": compute_layout(Path(md_path))}
 
 
 # ---------- HTML-дашборд ----------
@@ -169,6 +262,27 @@ def render_dashboard(calc: dict, model: str = "", size: str = "") -> Path:
         f"<div class='track'><div class='fill' style='width:{i['total']/total*100:.1f}%'></div></div>"
         f"<div class='pct'>{i['total']/total*100:.1f}%</div></div>"
         for i in sorted(calc["items"], key=lambda x: -x["total"]))
+    layout_html = ""
+    lay = calc.get("layout")
+    if lay:
+        lrows = "".join(
+            f"<tr><td>{r['name']}</td><td class='num'>{r['row_len_cm']:g} см</td>"
+            f"<td class='num'>{r['b_cm']:g} см</td></tr>"
+            for r in lay["rows"])
+        kim_pct = f"{lay['kim']*100:.0f}%" if lay["kim"] else "—"
+        layout_html = f"""
+<section><h2>Раскладка кроя · ширина рулона {lay['width_m']:g} м · {lay['strips']} полос</h2>
+<div class="cards" style="margin-bottom:16px">
+<div class="card"><div class="label">Метраж по раскладке</div><div class="value blue">{lay['length_m']:g} м.пог.</div>
+<div class="sub">≈ {lay['used_m2']:g} м² ткани фактически</div></div>
+<div class="card"><div class="label">Площадь деталей</div><div class="value blue">{lay['area_m2']:g} м²</div>
+<div class="sub">сумма площадей всех деталей кроя</div></div>
+<div class="card"><div class="label">КИМ (использование ткани)</div><div class="value blue">{kim_pct}</div>
+<div class="sub">площадь деталей / площадь по раскладке</div></div>
+</div>
+<table><thead><tr><th>Полоса раскладки</th><th class="num">Длина полосы</th>
+<th class="num">Занято по ширине</th></tr></thead>
+<tbody>{lrows}</tbody></table></section>"""
     warn = ""
     if calc["unaccounted"]:
         lis = "".join(f"<li>{u['material']} — {u['qty']:g} {u['unit']} "
@@ -197,6 +311,7 @@ def render_dashboard(calc: dict, model: str = "", size: str = "") -> Path:
 <tr class="total"><td>Итого учтено</td><td></td><td></td><td class="num">{calc['total']:,.1f} ₽</td><td class="num">100%</td></tr>
 </tbody></table></section>
 <section><h2>Распределение затрат</h2>{bars}</section>
+{layout_html}
 {warn}
 <footer>sewflow · tkcost</footer>
 </div></body></html>"""
@@ -213,5 +328,8 @@ def run(techcard: str, model: str = "", size: str = "") -> dict:
 
 if __name__ == "__main__":
     import sys
+    sys.stdout.reconfigure(encoding="utf-8")
     res = run(sys.argv[1] if len(sys.argv) > 1 else "SB-146.md")
-    print(f"Итого: {res['total']} ₽ · отчёт: {res['report']}")
+    lay = res.get("layout")
+    lay_msg = f" · раскладка: {lay['length_m']:g} м.пог., КИМ {lay['kim']:.0%}" if lay else ""
+    print(f"Итого: {res['total']} ₽{lay_msg} · отчёт: {res['report']}")
