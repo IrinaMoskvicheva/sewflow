@@ -72,15 +72,16 @@ python -m modules.costing "СБ 150.md"   # расчёт себестоимос�
 
 ## Скриншоты
 
-| Главный экран | Дашборд себестоимости |
-|---|---|
-| ![main](screenshots/01-dashboard.png) | ![cost](screenshots/02-cost-dashboard.png) |
+| Главный экран | Себестоимость · СБ 150 | Себестоимость · ГЛ 150 |
+|---|---|---|
+| ![main](screenshots/01-dashboard.png) | ![cost-sb](screenshots/02-cost-dashboard.png) | ![cost-gl](screenshots/03-cost-dashboard-gl.png) |
 
-Чертежи из ручных эскизов (tcgen + gpt-image-2, режим image-to-image):
+Чертежи техкарт (tcgen + gpt-image-2 по ручному эскизу):
 
-| Чехол для сноуборда 150 | Чехол для горных лыж 150 |
+| Чертёж · СБ 150 | Чертёж · ГЛ 150 |
 |---|---|
-| ![СБ 150](tech_maps/СБ%20150.png) | ![ГЛ 150](tech_maps/ГЛ%20150.png) |
+| ![dr-sb](screenshots/06-drawing-sb.png) | ![dr-gl](screenshots/07-drawing-gl.png) |
+
 
 ## Скиллы Claude Code
 
