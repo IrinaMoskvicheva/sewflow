@@ -67,14 +67,20 @@ python app.py            # → http://127.0.0.1:5000
 CLI-режим:
 
 ```bash
-python -m modules.costing SB-146.md   # расчёт себестоимости
+python -m modules.costing "СБ 150.md"   # расчёт себестоимости
 ```
 
 ## Скриншоты
 
-| Главный экран | Дашборд себестоимости | Чертёж из ручного эскиза (tcgen + gpt-image-2) |
-|---|---|---|
-| ![main](screenshots/01-dashboard.png) | ![cost](screenshots/02-cost-dashboard.png) | ![drawing](tech_maps/СБ%20150.png) |
+| Главный экран | Дашборд себестоимости |
+|---|---|
+| ![main](screenshots/01-dashboard.png) | ![cost](screenshots/02-cost-dashboard.png) |
+
+Чертежи из ручных эскизов (tcgen + gpt-image-2, режим image-to-image):
+
+| Чехол для сноуборда 150 | Чехол для горных лыж 150 |
+|---|---|
+| ![СБ 150](tech_maps/СБ%20150.png) | ![ГЛ 150](tech_maps/ГЛ%20150.png) |
 
 ## Скиллы Claude Code
 

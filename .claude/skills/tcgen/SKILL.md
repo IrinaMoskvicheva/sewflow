@@ -30,6 +30,7 @@ description: Генерирует производственную техкар�
 ## Шаг 2. Составь содержание техкарты
 
 Правила:
+- **Все детали пронумерованы цифрой в кружке** (①, ②, ③…). Нумерация идёт с 1 и без пропусков: количество деталей в итоговой техкарте и на итоговом чертеже должно совпадать с последним номером (если деталь ⑥ — деталей ровно шесть). Номера на чертеже и в таблице «Детали кроя» должны совпадать.
 - **Расположение деталей сохраняй как на рисунке** — меняй только пропорции под реальные размеры изделия.
 - Все размеры деталей кроя — **с припусками 1 см на каждую швейную сторону**.
 - **Никакой служебной информации**: без даты составления, имени специалиста, номеров ревизий, подписей и т.п. Только то, что нужно для производства и расчёта себестоимости материалов.
@@ -60,18 +61,38 @@ description: Генерирует производственную техкар�
 
 ## Шаг 4. Сгенерируй чертёж через ProxyAPI (gpt-image-2)
 
-По рисунку сделай чистый чертёж в масштабе (расположение деталей — как у пользователя):
+Пайплайн гибридный — три источника сводятся в один промпт:
 
-```bash
-curl -s https://api.proxyapi.ru/openai/v1/images/generations \
-  -H "Authorization: Bearer $PROXYAPI_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-image-2",
-    "prompt": "technical flat sketch of a <описание изделия> sewing pattern, black line drawing on white background, dimension labels in centimeters, clean industrial style, no text besides dimensions",
-    "size": "1024x1024"
-  }'
+1. **Контуры — из эскиза (image-to-image).** Отправь `sketches/<название> <размер>.jpg`
+   в `images/edits`: модель перерисовывает детали с сохранением формы кривых и компоновки.
+2. **Расшифровка — инструмент Read (шаг 1).** Из прочитанного эскиза у тебя уже есть:
+   список деталей с номерами, размеры, рукописные комментарии.
+3. **Коррекция — в промпте.** Подставь расшифрованное: размеры бери из техкарты
+   (с припусками), требуй выровнять пропорции под них, перечисли комментарии,
+   которые надо перенести/расшифровать. Оформление — по шаблону
+   `drawing-template.md` (лежит рядом со скиллом): нумерация в кружках,
+   размерные линии, штамп спецификации в правом нижнем углу.
+
+```python
+import base64, requests
+key = <PROXYAPI_KEY из .env>
+r = requests.post('https://api.proxyapi.ru/openai/v1/images/edits',
+    headers={'Authorization': f'Bearer {key}'},
+    files={'image': open('sketches/<название> <размер>.jpg', 'rb')},
+    data={'model': 'gpt-image-2', 'size': '1024x1024',
+          'prompt': ('Redraw this hand-drawn sewing pattern sketch as a technical drawing: '
+                     'keep the exact shapes, curves and layout of all pieces (не выпрямлять '
+                     'округлые торцы и изгибы до прямоугольников), black line drawing on white background. '
+                     'Straighten proportions to the real dimensions listed below, add dimension arrows '
+                     'in centimeters, mark each piece with a circled number 1..N (N = exact number of pieces). '
+                     'Transcribe the annotations listed below. Add a spec stamp box in the bottom-right corner. '
+                     '<детали и размеры из техкарты> <комментарии к переносу> <строки штампа>')},
+    timeout=240)
 ```
+
+Если `images/edits` недоступен/вернул ошибку — запасной режим: `images/generations`
+с текстовым промптом, в котором каждая деталь описана отдельным пунктом списка
+(форма контура + размеры: «закруглённые торцы», «трапеция низ 36 / верх 30»).
 
 `PROXYAPI_KEY` бери из `.env` в корне проекта (не выводи значение ключа в чат).
 Из ответа извлеки `data[0].b64_json` (или `url`), сохрани картинку в
